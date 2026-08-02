@@ -30,6 +30,17 @@ Defaults are 5 words in 2 minutes; both are adjustable in setup.
 
 Keyboard shortcuts during play: **Space** = correct, **P** = pass.
 
+## Sound
+
+Scoring, winning a turn, running out of time and the final scoreboard each get a sting,
+and a countdown bed comes in for the closing stretch — timed so its last beat lands on
+zero whatever the round length. Passing is silent: a pass is not a failure.
+
+The speaker button in the header mutes everything, from any screen, and the choice is
+remembered. Audio never blocks play — a missing file, an unsupported codec or a browser
+autoplay block all degrade to silence. See [sounds/README.md](sounds/README.md) for the
+clips and how to swap them.
+
 ## Playing in class
 
 Students only need a browser and one link:
@@ -110,7 +121,9 @@ you change the parsing rules, apply the change in both repos.
 ## Tests
 
 A headless walkthrough of a full game (setup validation, both teams' turns, pause,
-scoring, tie-breaking, no-repeat dealing) runs against the live sheet:
+scoring, tie-breaking, no-repeat dealing, the single-word rule and the mute toggle) runs
+against the live sheet, plus a suite that drives the countdown alignment against a fake
+audio element:
 
 ```sh
 npm install

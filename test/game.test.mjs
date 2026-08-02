@@ -196,5 +196,46 @@ check(
   !wb.availableCategories(bank, 'en', wb.availableLevels(bank, 'en')).includes('Idioms'),
 );
 
+console.log('\n-- sound --');
+const sfx = await import(pathToFileURL(path.join(ROOT, 'sfx.js')).href);
+
+// Audio failure is silent by design, so a renamed clip would never surface at
+// runtime. This is the only thing standing between a typo and a mute game.
+sfx.SOUND_FILES.forEach((src) => {
+  check(`${src} exists`, fs.existsSync(path.join(ROOT, src)));
+});
+check('every clip lives under sounds/', sfx.SOUND_FILES.every((s) => s.startsWith('sounds/')));
+check('no duplicate clip paths', new Set(sfx.SOUND_FILES).size === sfx.SOUND_FILES.length);
+
+// jsdom has no Audio constructor, so the whole module must no-op rather than
+// throw — the same path a browser takes when a codec or autoplay blocks it.
+check('play() survives without Audio', (() => { try { sfx.play('correct'); return true; } catch { return false; } })());
+check('unknown kind is ignored', (() => { try { sfx.play('nope'); return true; } catch { return false; } })());
+check('countdown helpers survive', (() => {
+  try { sfx.syncCountdown(10); sfx.pauseCountdown(); sfx.resumeCountdown(10); sfx.stopCountdown(); sfx.stopStings(); return true; }
+  catch { return false; }
+})());
+
+check('starts unmuted', sfx.isMuted() === false);
+check('setMuted(true) sticks', sfx.setMuted(true) === true && sfx.isMuted() === true);
+check('setMuted(false) sticks', sfx.setMuted(false) === false && sfx.isMuted() === false);
+
+console.log('\n-- mute toggle --');
+click('backToSetupBtn');
+const muteIcon = () => $('muteIcon').textContent;
+check('button starts on', $('muteBtn').getAttribute('aria-pressed') === 'false' && muteIcon() === '🔊', muteIcon());
+click('muteBtn');
+check('click mutes', $('muteBtn').getAttribute('aria-pressed') === 'true' && muteIcon() === '🔇', muteIcon());
+check('module agrees', sfx.isMuted() === true);
+check('mute persists to storage', JSON.parse(localStorage.getItem('watchword-setup-v1')).muted === true);
+click('muteBtn');
+check('click unmutes', $('muteBtn').getAttribute('aria-pressed') === 'false' && sfx.isMuted() === false);
+
+// Reset is a setup-form action; it must not un-silence the room.
+click('muteBtn');
+click('resetSetup');
+check('reset keeps mute', sfx.isMuted() === true && muteIcon() === '🔇', muteIcon());
+click('muteBtn');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

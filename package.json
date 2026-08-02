@@ -5,7 +5,7 @@
   "description": "One-word-clue guessing game for language classrooms.",
   "type": "module",
   "scripts": {
-    "test": "node test/game.test.mjs",
+    "test": "node test/game.test.mjs && node test/sfx.test.mjs",
     "start": "node serve.mjs"
   },
   "devDependencies": {

@@ -6,6 +6,7 @@ import {
   buildPool,
   createDealer,
 } from './wordbank.js';
+import * as sfx from './sfx.js';
 
 const STORAGE_KEY = 'watchword-setup-v1';
 
@@ -59,6 +60,8 @@ const scoreboard = document.getElementById('scoreboard');
 const playAgainBtn = document.getElementById('playAgainBtn');
 const backToSetupBtn = document.getElementById('backToSetupBtn');
 
+const muteBtn = document.getElementById('muteBtn');
+
 const DEFAULTS = {
   teams: ['Team 1', 'Team 2'],
   language: 'en',
@@ -66,6 +69,7 @@ const DEFAULTS = {
   categories: [],
   seconds: 120,
   target: 5,
+  muted: false,
 };
 
 let bank = {};
@@ -209,6 +213,9 @@ function readSetup() {
     categories: checkedValues(categoryPills),
     seconds: Number(secondsInput.value),
     target: Number(targetInput.value),
+    // Mute lives in the header rather than the setup form, so carry it across
+    // instead of letting a fresh read drop it.
+    muted: sfx.isMuted(),
   };
 }
 
@@ -268,6 +275,7 @@ function beginTurn() {
     finished: false,
   };
 
+  sfx.stopStings();
   playTeam.textContent = turn.team;
   playTarget.textContent = `/ ${settings.target}`;
   pauseBtn.textContent = 'Pause';
@@ -305,6 +313,10 @@ function tick() {
   timerText.classList.toggle('urgent', remaining <= 15000 && remaining > 0);
   timerFill.classList.toggle('urgent', remaining <= 15000 && remaining > 0);
 
+  // The countdown bed decides for itself when to come in, so that its last
+  // beat lands on zero whatever the round length.
+  sfx.syncCountdown(remaining / 1000);
+
   if (remaining <= 0) endTurn('time');
 }
 
@@ -312,6 +324,7 @@ function togglePause() {
   if (turn.remainingWhenPaused === null) {
     turn.remainingWhenPaused = remainingMs();
     stopTicking();
+    sfx.pauseCountdown();
     pauseBtn.textContent = 'Resume';
     wordDisplay.classList.add('blurred');
   } else {
@@ -319,6 +332,7 @@ function togglePause() {
     turn.remainingWhenPaused = null;
     pauseBtn.textContent = 'Pause';
     wordDisplay.classList.remove('blurred');
+    sfx.resumeCountdown(remainingMs() / 1000);
     startTicking();
   }
 }
@@ -346,10 +360,13 @@ function markCorrect() {
   turn.words.push({ ...turn.current, result: 'correct' });
   updateScore();
 
+  // One sound per action: the word that wins the turn gets the bigger sting
+  // from endTurn rather than a score chirp underneath it.
   if (turn.correct >= settings.target) {
     endTurn('target');
     return;
   }
+  sfx.play('correct');
   nextWord();
 }
 
@@ -368,7 +385,12 @@ function endTurn(reason) {
 
   const remaining = remainingMs();
   stopTicking();
+  sfx.stopCountdown();
   wordDisplay.classList.remove('blurred');
+
+  // Ending the turn by hand is a deliberate, undramatic act — no sting.
+  if (reason === 'target') sfx.play('turnWon');
+  else if (reason === 'time') sfx.play('timeUp');
 
   const elapsed = settings.seconds - Math.max(0, remaining / 1000);
 
@@ -439,6 +461,7 @@ function advanceTurn() {
   if (game.turnIndex >= settings.teams.length - 1) {
     renderFinal();
     showScreen('final');
+    sfx.play('gameOver');
     return;
   }
   game.turnIndex += 1;
@@ -500,12 +523,29 @@ function formatTime(totalSeconds) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+/* ─── Sound ───────────────────────────────────────────────────── */
+
+function applyMute(value) {
+  const isMuted = sfx.setMuted(value);
+  muteBtn.setAttribute('aria-pressed', String(isMuted));
+  muteBtn.classList.toggle('muted', isMuted);
+  document.getElementById('muteIcon').textContent = isMuted ? '🔇' : '🔊';
+  document.getElementById('muteLabel').textContent = isMuted ? 'Sound off' : 'Sound on';
+  settings.muted = isMuted;
+}
+
 /* ─── Wiring ──────────────────────────────────────────────────── */
+
+muteBtn.addEventListener('click', () => {
+  applyMute(!sfx.isMuted());
+  saveSettings();
+});
 
 startGameBtn.addEventListener('click', startGame);
 
 resetSetupBtn.addEventListener('click', () => {
-  settings = { ...DEFAULTS, language: settings.language };
+  // Reset is about the setup form; it should not silently unmute the room.
+  settings = { ...DEFAULTS, language: settings.language, muted: sfx.isMuted() };
   populateSetupInputs();
   refreshSetup();
   setupError.textContent = '';
@@ -548,8 +588,16 @@ pauseBtn.addEventListener('click', togglePause);
 endTurnBtn.addEventListener('click', () => endTurn('ended'));
 
 nextTurnBtn.addEventListener('click', advanceTurn);
-playAgainBtn.addEventListener('click', playAgain);
-backToSetupBtn.addEventListener('click', () => showScreen('setup'));
+
+playAgainBtn.addEventListener('click', () => {
+  sfx.stopStings(); // cut the winner drumroll short
+  playAgain();
+});
+
+backToSetupBtn.addEventListener('click', () => {
+  sfx.stopStings();
+  showScreen('setup');
+});
 
 document.addEventListener('keydown', (event) => {
   if (screens.play.classList.contains('hidden')) return;
@@ -572,6 +620,7 @@ document.addEventListener('keydown', (event) => {
 
 async function init() {
   loadSettings();
+  applyMute(settings.muted);
   populateSetupInputs();
   bankStatus.textContent = 'Loading words…';
 
