@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Watchword</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="app-header">
+      <h1>Watchword</h1>
+      <p class="tagline">One-word clues. Beat the clock.</p>
+    </header>
+
+    <!-- ─── Setup ─────────────────────────────────────────────── -->
+    <section id="setupScreen" class="card">
+      <h2>Setup</h2>
+
+      <label class="field">
+        <span class="field-label">Teams (one per line)</span>
+        <textarea id="teamInput" rows="4" placeholder="Team 1&#10;Team 2"></textarea>
+        <span class="hint">Each team plays its own timed turn. Two players per team works best.</span>
+      </label>
+
+      <div class="field-group">
+        <div class="field-heading">
+          <span class="field-label">Word bank</span>
+          <span id="bankStatus" class="hint"></span>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Language</span>
+          <select id="languageSelect"></select>
+        </label>
+
+        <div class="field">
+          <div class="field-heading">
+            <span class="field-label">Levels</span>
+            <button id="toggleLevels" type="button" class="link-button">All / none</button>
+          </div>
+          <div id="levelPills" class="pill-group"></div>
+        </div>
+
+        <div class="field">
+          <div class="field-heading">
+            <span class="field-label">Categories</span>
+            <button id="toggleCategories" type="button" class="link-button">All / none</button>
+          </div>
+          <div id="categoryPills" class="pill-group"></div>
+        </div>
+      </div>
+
+      <div class="double-field">
+        <label class="field">
+          <div class="field-heading">
+            <span class="field-label">Round length</span>
+            <span class="hint">seconds</span>
+          </div>
+          <input id="secondsInput" type="number" min="15" max="600" step="15" value="120" />
+        </label>
+
+        <label class="field">
+          <div class="field-heading">
+            <span class="field-label">Words to win</span>
+            <span class="hint">per turn</span>
+          </div>
+          <input id="targetInput" type="number" min="1" max="50" value="5" />
+        </label>
+      </div>
+
+      <p id="poolSummary" class="pool-summary"></p>
+
+      <div class="actions">
+        <button id="startGame" class="primary">Start game</button>
+        <button id="resetSetup" type="button" class="ghost">Reset</button>
+      </div>
+      <p id="setupError" class="error" aria-live="polite"></p>
+    </section>
+
+    <!-- ─── Handoff ───────────────────────────────────────────── -->
+    <section id="handoffScreen" class="card hidden">
+      <p class="label">Next up</p>
+      <p id="handoffTeam" class="team-name-big"></p>
+      <div class="handoff-note">
+        <p class="handoff-title">Pass the device to the clue-giver.</p>
+        <p class="hint">Everyone else, look away — the screen shows the secret word.</p>
+      </div>
+      <p id="handoffRules" class="hint handoff-rules"></p>
+      <div class="actions">
+        <button id="beginTurn" class="primary wide">I'm the clue-giver — start</button>
+      </div>
+      <div class="actions">
+        <button id="handoffBack" type="button" class="ghost">Back to setup</button>
+      </div>
+    </section>
+
+    <!-- ─── Play ──────────────────────────────────────────────── -->
+    <section id="playScreen" class="card hidden">
+      <div class="play-top">
+        <div class="play-team" id="playTeam"></div>
+        <div class="play-score"><span id="playScore">0</span><span class="play-score-target" id="playTarget">/ 5</span></div>
+      </div>
+
+      <div class="timer-wrap">
+        <div id="timerText" class="timer-text">2:00</div>
+        <div class="timer-bar"><div id="timerFill" class="timer-fill"></div></div>
+      </div>
+
+      <div class="word-stage">
+        <p class="label" id="wordCategory"></p>
+        <p id="wordDisplay" class="secret-word"></p>
+      </div>
+
+      <div class="play-actions">
+        <button id="correctBtn" class="primary big-action">Correct</button>
+        <button id="passBtn" type="button" class="ghost big-action">Pass</button>
+      </div>
+      <p class="hint play-hint">Give a <strong>one-word</strong> clue. Space = correct, P = pass.</p>
+
+      <div class="actions">
+        <button id="pauseBtn" type="button" class="ghost">Pause</button>
+        <button id="endTurnBtn" type="button" class="danger">End turn</button>
+      </div>
+    </section>
+
+    <!-- ─── Round result ──────────────────────────────────────── -->
+    <section id="resultScreen" class="card hidden">
+      <p class="label">Turn over</p>
+      <p id="resultTeam" class="team-name-big"></p>
+      <p id="resultHeadline" class="result-headline"></p>
+      <div id="resultStats" class="result-stats"></div>
+      <div id="resultWords" class="result-words"></div>
+      <div class="actions">
+        <button id="nextTurnBtn" class="primary">Next team</button>
+      </div>
+    </section>
+
+    <!-- ─── Final scoreboard ──────────────────────────────────── -->
+    <section id="finalScreen" class="card hidden">
+      <p class="label">Final score</p>
+      <h2 id="winnerText" class="winner-text"></h2>
+      <div id="scoreboard" class="scoreboard"></div>
+      <div class="actions">
+        <button id="playAgainBtn" class="primary">Play again</button>
+        <button id="backToSetupBtn" type="button" class="ghost">Edit setup</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
