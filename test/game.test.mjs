@@ -54,6 +54,23 @@ check('categories rendered', $('categoryPills').querySelectorAll('input').length
 check('pool summary', /\d+ words ready/.test($('poolSummary').textContent), $('poolSummary').textContent);
 check('starts on setup', visible() === 'setupScreen', visible());
 
+console.log('\n-- related-words toggle --');
+check('on by default', $('relatedInput').checked);
+const poolCount = () => Number(($('poolSummary').textContent.match(/^(\d+)/) || [])[1] || 0);
+const withRelated = poolCount();
+const categoriesWithRelated = $('categoryPills').querySelectorAll('input').length;
+check('summary breaks the count down', /\(\d+ \+ \d+ related\)/.test($('poolSummary').textContent), $('poolSummary').textContent);
+$('relatedInput').checked = false;
+fire('relatedInput', 'change');
+const withoutRelated = poolCount();
+check(`unticking shrinks the pool (${withRelated} -> ${withoutRelated})`, withoutRelated > 0 && withoutRelated < withRelated);
+check('breakdown drops when off', !/related\)/.test($('poolSummary').textContent), $('poolSummary').textContent);
+check('categories shrink too', $('categoryPills').querySelectorAll('input').length < categoriesWithRelated,
+  `${$('categoryPills').querySelectorAll('input').length} vs ${categoriesWithRelated}`);
+$('relatedInput').checked = true;
+fire('relatedInput', 'change');
+check('reticking restores the pool', poolCount() === withRelated, `${poolCount()} vs ${withRelated}`);
+
 console.log('\n-- validation --');
 $('teamInput').value = 'Solo';
 click('startGame');
@@ -190,11 +207,46 @@ for (const lang of wb.availableLanguages(bank)) {
   check(`${lang} pool is all single words (${pool.length})`, pool.every((p) => wb.isPlayable(p.word)));
 }
 check('no filter is offered empty', emptyOffer === '', emptyOffer);
-check('en hides its roster-only A0', !wb.availableLevels(bank, 'en').includes('A0'));
+check('en hides its roster-only A0 (related on)', !wb.availableLevels(bank, 'en', true).includes('A0'));
+check('en hides its roster-only A0 (related off)', !wb.availableLevels(bank, 'en', false).includes('A0'));
+
+// The idiom rows are multi-word in the `word` column but their distractors
+// gloss them in one word ("blab" for "spill the beans"), so the category is
+// playable only when related words are switched on.
+const enCats = (on) => wb.availableCategories(bank, 'en', wb.availableLevels(bank, 'en', on), on);
+check('idioms hidden without related words', !enCats(false).includes('Idioms'));
+check('idioms return with related words', enCats(true).includes('Idioms'));
+
+console.log('\n-- related words --');
+for (const lang of wb.availableLanguages(bank, true)) {
+  const off = wb.buildPool(bank, lang, wb.availableLevels(bank, lang, false), enCatsFor(lang, false), false);
+  const on = wb.buildPool(bank, lang, wb.availableLevels(bank, lang, true), enCatsFor(lang, true), true);
+  const core = on.filter((p) => !p.related).length;
+  check(`${lang}: off is core only (${off.length})`, off.every((p) => !p.related));
+  check(`${lang}: on is bigger (${off.length} -> ${on.length})`, on.length > off.length * 3);
+  // Curated words must keep their own level and category, never be shadowed by
+  // an earlier row that happens to list them as a distractor.
+  check(`${lang}: every core word survives`, core === off.length, `${core} vs ${off.length}`);
+  const keys = on.map((p) => p.word.toLocaleLowerCase());
+  check(`${lang}: no word deals twice`, new Set(keys).size === keys.length, `${keys.length} vs ${new Set(keys).size}`);
+}
+
+function enCatsFor(lang, on) {
+  return wb.availableCategories(bank, lang, wb.availableLevels(bank, lang, on), on);
+}
+
 check(
-  'en hides all-idiom categories',
-  !wb.availableCategories(bank, 'en', wb.availableLevels(bank, 'en')).includes('Idioms'),
+  'dealer key separates the two modes',
+  wb.createDealer(bank, 'en', ['A1'], enCatsFor('en', true), true).key !==
+    wb.createDealer(bank, 'en', ['A1'], enCatsFor('en', true), false).key,
 );
+
+// The sheet files a few words under two categories on purpose; dealing one
+// twice in a game would break the no-repeat promise.
+const enCore = wb.buildPool(bank, 'en', wb.availableLevels(bank, 'en', false), enCatsFor('en', false), false);
+['apple', 'madrid', 'map', 'paradox', 'platform'].forEach((w) => {
+  check(`"${w}" is dealt once`, enCore.filter((p) => p.word.toLowerCase() === w).length === 1);
+});
 
 console.log('\n-- sound --');
 const sfx = await import(pathToFileURL(path.join(ROOT, 'sfx.js')).href);

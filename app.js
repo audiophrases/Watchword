@@ -26,6 +26,7 @@ const toggleLevels = document.getElementById('toggleLevels');
 const toggleCategories = document.getElementById('toggleCategories');
 const secondsInput = document.getElementById('secondsInput');
 const targetInput = document.getElementById('targetInput');
+const relatedInput = document.getElementById('relatedInput');
 const bankStatus = document.getElementById('bankStatus');
 const poolSummary = document.getElementById('poolSummary');
 const setupError = document.getElementById('setupError');
@@ -69,6 +70,7 @@ const DEFAULTS = {
   categories: [],
   seconds: 120,
   target: 5,
+  includeRelated: true,
   muted: false,
 };
 
@@ -132,8 +134,14 @@ function renderPills(container, values, selected) {
   });
 }
 
+// Read straight from the checkbox: the filter lists have to redraw the moment
+// it changes, before any of it is committed to settings.
+function relatedOn() {
+  return relatedInput.checked;
+}
+
 function renderLanguages() {
-  const languages = availableLanguages(bank);
+  const languages = availableLanguages(bank, relatedOn());
   languageSelect.innerHTML = '';
   languages.forEach((code) => {
     const option = document.createElement('option');
@@ -148,14 +156,14 @@ function renderLanguages() {
 }
 
 function renderLevels() {
-  const levels = availableLevels(bank, settings.language);
+  const levels = availableLevels(bank, settings.language, relatedOn());
   const selected = settings.levels.filter((l) => levels.includes(l));
   renderPills(levelPills, levels, selected.length ? selected : levels);
 }
 
 function renderCategories() {
   const levels = checkedValues(levelPills);
-  const categories = availableCategories(bank, settings.language, levels);
+  const categories = availableCategories(bank, settings.language, levels, relatedOn());
   const selected = settings.categories.filter((c) => categories.includes(c));
   renderPills(categoryPills, categories, selected.length ? selected : categories);
 }
@@ -163,7 +171,7 @@ function renderCategories() {
 function updatePoolSummary() {
   const levels = checkedValues(levelPills);
   const categories = checkedValues(categoryPills);
-  const pool = buildPool(bank, settings.language, levels, categories);
+  const pool = buildPool(bank, settings.language, levels, categories, relatedOn());
   const target = Number(targetInput.value) || DEFAULTS.target;
 
   if (!pool.length) {
@@ -173,8 +181,10 @@ function updatePoolSummary() {
   }
 
   poolSummary.classList.remove('pool-warning');
+  const related = pool.filter((entry) => entry.related).length;
+  const breakdown = related ? ` (${pool.length - related} + ${related} related)` : '';
   poolSummary.textContent =
-    `${pool.length} words ready — about ${Math.floor(pool.length / Math.max(target, 1))} full turns before any word repeats.`;
+    `${pool.length} words ready${breakdown} — about ${Math.floor(pool.length / Math.max(target, 1))} full turns before any word repeats.`;
 }
 
 function refreshSetup() {
@@ -187,6 +197,7 @@ function populateSetupInputs() {
   teamInput.value = settings.teams.join('\n');
   secondsInput.value = settings.seconds;
   targetInput.value = settings.target;
+  relatedInput.checked = settings.includeRelated !== false;
 }
 
 /* ─── Setup reading ───────────────────────────────────────────── */
@@ -213,6 +224,7 @@ function readSetup() {
     categories: checkedValues(categoryPills),
     seconds: Number(secondsInput.value),
     target: Number(targetInput.value),
+    includeRelated: relatedOn(),
     // Mute lives in the header rather than the setup form, so carry it across
     // instead of letting a fresh read drop it.
     muted: sfx.isMuted(),
@@ -226,7 +238,7 @@ function validate(next) {
   if (!Number.isFinite(next.seconds) || next.seconds < 15) return 'Round length must be at least 15 seconds.';
   if (!Number.isFinite(next.target) || next.target < 1) return 'Words to win must be at least 1.';
 
-  const pool = buildPool(bank, next.language, next.levels, next.categories);
+  const pool = buildPool(bank, next.language, next.levels, next.categories, next.includeRelated);
   if (!pool.length) return 'No words match these filters.';
   if (pool.length < next.target) {
     return `Only ${pool.length} words match these filters — fewer than the ${next.target} needed to win a turn.`;
@@ -246,7 +258,7 @@ function startGame() {
   saveSettings();
 
   game = {
-    dealer: createDealer(bank, next.language, next.levels, next.categories),
+    dealer: createDealer(bank, next.language, next.levels, next.categories, next.includeRelated),
     turnIndex: 0,
     results: [],
   };
@@ -567,6 +579,22 @@ levelPills.addEventListener('change', () => {
 categoryPills.addEventListener('change', updatePoolSummary);
 targetInput.addEventListener('input', updatePoolSummary);
 
+// Remember what is ticked, plus anything previously chosen that this mode
+// simply isn't showing. Flipping the switch retires whole categories — the
+// idiom ones only exist as related words — and a category disappearing is not
+// the same as the teacher unticking it, so it must come back on the way back.
+function rememberPicks(container, chosen) {
+  const onScreen = new Set(Array.from(container.querySelectorAll('input')).map((i) => i.value));
+  return [...checkedValues(container), ...chosen.filter((value) => !onScreen.has(value))];
+}
+
+relatedInput.addEventListener('change', () => {
+  settings.levels = rememberPicks(levelPills, settings.levels);
+  settings.categories = rememberPicks(categoryPills, settings.categories);
+  settings.includeRelated = relatedOn();
+  refreshSetup();
+});
+
 function toggleAll(container) {
   const inputs = Array.from(container.querySelectorAll('input'));
   const allChecked = inputs.every((i) => i.checked);
@@ -628,7 +656,7 @@ async function init() {
     bank = await fetchWordBank();
     renderLanguages();
     refreshSetup();
-    const total = availableLanguages(bank).length;
+    const total = availableLanguages(bank, relatedOn()).length;
     bankStatus.textContent = `Live from the shared sheet · ${total} languages`;
   } catch (error) {
     bankStatus.textContent = 'Could not load the word list.';

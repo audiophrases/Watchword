@@ -193,6 +193,26 @@ button:focus-visible {
   font-size: 0.9rem;
 }
 
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.checkbox-field .field-label {
+  margin-bottom: 2px;
+}
+
 .hidden-input {
   position: absolute;
   opacity: 0;

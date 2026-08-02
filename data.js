@@ -1,6 +1,10 @@
 // Word bank loader — reads the shared Google Sheet published as CSV.
-// Sheet columns: language, level, category, word, enabled, notes
-// Shape returned: bank[language][level][category] = [word, ...]
+// Sheet columns: language, level, category, word, enabled, notes, Distractors
+// Shape returned: bank[language][level][category] = [{ word, distractors }, ...]
+//
+// Distractors are the near-synonyms the Impostor game hands its impostor. They
+// are carried through unchanged here, matching Impostor's own shape; whether
+// Watchword deals them is a game decision made in wordbank.js.
 
 const CSV_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQcxAWrO_CWYBeeP8XFDZVuqz_V8R93lIffKbstLBpnQK-1CSL4pqS-Us5DJI0OrY02MiKO1Thj5J3L/pub?gid=2048829432&single=true&output=csv';
@@ -90,6 +94,7 @@ export async function fetchWordBank() {
   const categoryIdx = headers.findIndex((h) => h.startsWith('category'));
   const wordIdx = headers.findIndex((h) => h === 'word' || h === 'words');
   const enabledIdx = headers.findIndex((h) => h.startsWith('enabled'));
+  const distractorsIdx = headers.findIndex((h) => h.startsWith('distractor'));
 
   if ([languageIdx, levelIdx, categoryIdx, wordIdx].some((idx) => idx === -1)) {
     throw new Error('The sheet must include language, level, category, and word columns.');
@@ -106,11 +111,21 @@ export async function fetchWordBank() {
     if (!language || !level || !category || !word) return;
     if (enabledIdx >= 0 && !isEnabled(cells[enabledIdx])) return;
 
+    // The sheet separates distractors with commas only — no other delimiter
+    // appears in any cell — and the CSV parser has already unwrapped the quotes.
+    const distractors =
+      distractorsIdx >= 0
+        ? (cells[distractorsIdx] || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+        : [];
+
     if (!bank[language]) bank[language] = {};
     if (!bank[language][level]) bank[language][level] = {};
     if (!bank[language][level][category]) bank[language][level][category] = [];
 
-    bank[language][level][category].push(word);
+    bank[language][level][category].push({ word, distractors });
   });
 
   if (!Object.keys(bank).length) {

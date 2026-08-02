@@ -85,16 +85,44 @@ in that sheet appears in **both apps** on the next page load; there is nothing t
 
 Sheet columns:
 
-| Column     | Purpose                                                          |
-|------------|------------------------------------------------------------------|
-| `language` | `en`, `fr`, `ca`, … — becomes a language option                  |
-| `level`    | CEFR level `A0`–`C2` — becomes a level filter                    |
-| `category` | Free text — becomes a category filter                            |
-| `word`     | The secret word                                                  |
-| `enabled`  | Set to `0`, `false` or `no` to retire a word without deleting it |
+| Column        | Purpose                                                          |
+|---------------|------------------------------------------------------------------|
+| `language`    | `en`, `fr`, `ca`, … — becomes a language option                  |
+| `level`       | CEFR level `A0`–`C2` — becomes a level filter                    |
+| `category`    | Free text — becomes a category filter                            |
+| `word`        | The secret word                                                  |
+| `enabled`     | Set to `0`, `false` or `no` to retire a word without deleting it |
+| `Distractors` | Comma-separated near-synonyms — dealt as extra words, see below  |
 
 New languages, levels and categories appear as filters automatically — no code change
 needed. Rows missing any of language / level / category / word are skipped.
+
+### Related words
+
+The `Distractors` column exists for the Impostor game, which hands those near-synonyms to
+its impostor. As Watchword answers they are ordinary vocabulary, and there are about six
+per row, so switching them on takes the bank from roughly 900 playable words to **5,500**:
+
+| Language | Words only | With related words |
+|----------|------------|--------------------|
+| ca       | 275        | 1,713              |
+| en       | 351        | 2,009              |
+| fr       | 299        | 1,786              |
+
+They are **on by default**, and the setup screen has a tickbox to turn them off. One thing
+to weigh when picking a level: a useful distractor is a *rarer* near-synonym of its row's
+word, so related words lean harder than the level they inherit — `cup` brings `mug`,
+`sleep` brings `doze`, and `eavesdrop` sits in A1. Untick the box for a class that needs
+to stay strictly on-level.
+
+Switching them on also revives the idiom categories, whose `word` column is entirely
+multi-word but whose distractors gloss each idiom in a single word — `blab` for
+*spill the beans*.
+
+A word is never dealt twice in one game, even where the sheet files it under two
+categories on purpose (`apple` as food and as a brand). Where a curated word is also some
+other row's distractor, the curated entry wins and keeps the level and category the sheet
+filed it under.
 
 ### Only single-word answers are dealt
 
@@ -107,16 +135,18 @@ for the Impostor game and for ordinary classroom use; Watchword simply never dea
 Hyphenated and elided forms are one written token spoken as one word, so `rendez-vous`,
 `grand-mère`, `s'asseoir` and `despertar-se` all stay in play.
 
-This is a Watchword game rule, not a parsing rule, so it lives in `wordbank.js` and leaves
-`data.js` byte-for-byte shareable with Impostor.
+This is a Watchword game rule, not a parsing rule, so it lives in `wordbank.js`. Both
+game rules do: `data.js` only reads the sheet, and hands on every row it finds.
 
 A level or category with nothing playable left is hidden from setup rather than offered
-and then found empty — English `A0` (a class roster of *Surname, Firstname* rows) and the
-all-idiom categories disappear for this reason. Of 1233 sheet entries, 934 are playable.
+and then found empty. English `A0` disappears for this reason in both modes — it is a
+class roster of *Surname, Firstname* rows, and those carry no distractors either.
 
 `data.js` (fetch + parse) is deliberately a **standalone copy** rather than a shared
-import, so neither app can break the other. The sheet is the single source of truth; if
-you change the parsing rules, apply the change in both repos.
+import, so neither app can break the other. It returns the same shape Impostor's does —
+`bank[language][level][category] = [{ word, distractors }]` — so the two stay easy to
+compare. The sheet is the single source of truth; if you change the parsing rules, apply
+the change in both repos.
 
 ## Tests
 
