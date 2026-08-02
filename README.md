@@ -85,6 +85,24 @@ Sheet columns:
 New languages, levels and categories appear as filters automatically — no code change
 needed. Rows missing any of language / level / category / word are skipped.
 
+### Only single-word answers are dealt
+
+The clue is one word, so the answer must be one word too. There is no unambiguous moment
+where *ice cream* has been guessed, and the format cannot judge a half-correct answer —
+which is why *Password* itself never uses multi-word answers.
+
+Entries containing a space are therefore **skipped, not deleted**. They stay in the sheet
+for the Impostor game and for ordinary classroom use; Watchword simply never deals them.
+Hyphenated and elided forms are one written token spoken as one word, so `rendez-vous`,
+`grand-mère`, `s'asseoir` and `despertar-se` all stay in play.
+
+This is a Watchword game rule, not a parsing rule, so it lives in `wordbank.js` and leaves
+`data.js` byte-for-byte shareable with Impostor.
+
+A level or category with nothing playable left is hidden from setup rather than offered
+and then found empty — English `A0` (a class roster of *Surname, Firstname* rows) and the
+all-idiom categories disappear for this reason. Of 1233 sheet entries, 934 are playable.
+
 `data.js` (fetch + parse) is deliberately a **standalone copy** rather than a shared
 import, so neither app can break the other. The sheet is the single source of truth; if
 you change the parsing rules, apply the change in both repos.

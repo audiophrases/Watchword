@@ -156,6 +156,45 @@ for (let t = 0; t < 2; t += 1) {
 }
 check('10 words drawn', drawn.length === 10, String(drawn.length));
 check('all unique', new Set(drawn).size === 10, drawn.join(', '));
+check(
+  'every word dealt is one word',
+  drawn.every((w) => !/\s/u.test(w)),
+  drawn.filter((w) => /\s/u.test(w)).join(' | '),
+);
+
+console.log('\n-- single-word rule --');
+const wb = await import(pathToFileURL(path.join(ROOT, 'wordbank.js')).href);
+const bank = await (await import(pathToFileURL(path.join(ROOT, 'data.js')).href)).fetchWordBank();
+
+check('keeps plain words', wb.isPlayable('book'));
+check('keeps hyphenated', wb.isPlayable('rendez-vous') && wb.isPlayable('grand-mère'));
+check('keeps elided', wb.isPlayable("s'asseoir") && wb.isPlayable('despertar-se'));
+check('drops phrases', !wb.isPlayable('ice cream') && !wb.isPlayable('Harry Potter'));
+check('drops roster names', !wb.isPlayable('Alsina Diaye, Martina'));
+check('drops non-breaking space', !wb.isPlayable('a b'));
+check('drops blank', !wb.isPlayable('') && !wb.isPlayable('   '));
+
+// Every filter the setup screen offers must actually yield words, or a teacher
+// picks it and gets an empty pool at kickoff.
+let emptyOffer = '';
+for (const lang of wb.availableLanguages(bank)) {
+  const levels = wb.availableLevels(bank, lang);
+  for (const level of levels) {
+    const cats = wb.availableCategories(bank, lang, [level]);
+    if (!wb.buildPool(bank, lang, [level], cats).length) emptyOffer ||= `${lang}/${level}`;
+    for (const cat of cats) {
+      if (!wb.buildPool(bank, lang, [level], [cat]).length) emptyOffer ||= `${lang}/${level}/${cat}`;
+    }
+  }
+  const pool = wb.buildPool(bank, lang, levels, wb.availableCategories(bank, lang, levels));
+  check(`${lang} pool is all single words (${pool.length})`, pool.every((p) => wb.isPlayable(p.word)));
+}
+check('no filter is offered empty', emptyOffer === '', emptyOffer);
+check('en hides its roster-only A0', !wb.availableLevels(bank, 'en').includes('A0'));
+check(
+  'en hides all-idiom categories',
+  !wb.availableCategories(bank, 'en', wb.availableLevels(bank, 'en')).includes('Idioms'),
+);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
