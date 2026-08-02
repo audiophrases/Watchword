@@ -3,6 +3,8 @@
 A one-word-clue guessing game for language classrooms, inspired by the Spanish TV show
 *Password*. Runs on a single shared device — no accounts, no build step, no backend.
 
+**▶ [Play Watchword](https://audiophrases.github.io/Watchword/)**
+
 ## How a game works
 
 Teams take turns. On a team's turn one player is the **clue-giver** and holds the device;
@@ -28,15 +30,41 @@ Defaults are 5 words in 2 minutes; both are adjustable in setup.
 
 Keyboard shortcuts during play: **Space** = correct, **P** = pass.
 
+## Playing in class
+
+Students only need a browser and one link:
+
+> **<https://audiophrases.github.io/Watchword/>**
+
+It runs the same on Windows, ChromeOS, macOS, phones and tablets, with nothing to install.
+
+Everything is client-side, so each device runs its own independent game. That suits the
+intended format anyway: one device per group, passed to whoever is giving clues.
+
+The only network requirement is access to `docs.google.com`, where the word bank lives.
+If a school filter blocks it, the word list cannot load and the app will say so.
+
 ## Running locally
 
-Open `index.html` directly in a browser, or serve the folder:
+Browsers block `index.html` from loading its code when opened straight off the disk —
+`app.js` is an ES module, and module scripts are refused on `file://` pages. So the
+folder has to be served, even for a single-player look.
 
-```
-python -m http.server 8000     # or:  npm start
+On Windows, double-click **`Play Watchword.bat`**. It finds Node.js or Python, starts the
+server and opens a browser.
+
+Anywhere else:
+
+```sh
+node serve.mjs        # or:  npm start
 ```
 
-Then visit http://localhost:8000.
+`serve.mjs` has no dependencies. It prints two addresses — `localhost` for this computer,
+and a `192.168.x.x` one that other machines on the same network can open, Chromebooks
+included. Note that many school networks isolate clients from each other, in which case
+only the hosted version will reach them.
+
+Add a port number to override the default 8000; if it is busy, the next free port is used.
 
 ## The word bank
 
@@ -46,12 +74,12 @@ in that sheet appears in **both apps** on the next page load; there is nothing t
 
 Sheet columns:
 
-| Column     | Purpose                                                     |
-|------------|-------------------------------------------------------------|
-| `language` | `en`, `fr`, `ca`, … — becomes a language option             |
-| `level`    | CEFR level `A0`–`C2` — becomes a level filter               |
-| `category` | Free text — becomes a category filter                       |
-| `word`     | The secret word                                             |
+| Column     | Purpose                                                          |
+|------------|------------------------------------------------------------------|
+| `language` | `en`, `fr`, `ca`, … — becomes a language option                  |
+| `level`    | CEFR level `A0`–`C2` — becomes a level filter                    |
+| `category` | Free text — becomes a category filter                            |
+| `word`     | The secret word                                                  |
 | `enabled`  | Set to `0`, `false` or `no` to retire a word without deleting it |
 
 New languages, levels and categories appear as filters automatically — no code change
@@ -66,12 +94,12 @@ you change the parsing rules, apply the change in both repos.
 A headless walkthrough of a full game (setup validation, both teams' turns, pause,
 scoring, tie-breaking, no-repeat dealing) runs against the live sheet:
 
-```
+```sh
 npm install
 npm test
 ```
 
-## Deploying to GitHub Pages
+## Deploying
 
-Push the repository, then in **Settings → Pages** choose *Deploy from a branch*, select
-`main` and the `/ (root)` folder. The site is static, so no build step is involved.
+GitHub Pages is enabled and serves `main` at the root, so **pushing to `main` publishes**.
+The site is static — no build step, and usually live within a minute.
