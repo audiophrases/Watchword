@@ -34,14 +34,19 @@ Keyboard shortcuts during play: **Space** = correct, **P** = pass.
 
 ## Sound
 
-Scoring, winning a turn, running out of time and the final scoreboard each get a sting,
-and a countdown bed comes in for the closing stretch — timed so its last beat lands on
-zero whatever the round length. Passing is silent: a pass is not a failure.
+Scoring, passing, winning a turn and running out of time each get their own sting, and a
+countdown comes in for the **last 5 seconds** of a turn, seeked so its final beat lands on
+zero whatever the round length.
+
+The final score is a set piece: the winner music starts, the screen goes black, and the
+scoreboard is revealed with 3.5 seconds of music still to play. That wait is measured from
+the clip's real duration rather than hard-coded, so swapping the clip retimes the reveal.
+Tap the black screen to skip it.
 
 The speaker button in the header mutes everything, from any screen, and the choice is
 remembered. Audio never blocks play — a missing file, an unsupported codec or a browser
-autoplay block all degrade to silence. See [sounds/README.md](sounds/README.md) for the
-clips and how to swap them.
+autoplay block all degrade to silence, and the reveal still happens on a fixed beat. See
+[sounds/README.md](sounds/README.md) for the clips and how to swap them.
 
 ## Playing in class
 

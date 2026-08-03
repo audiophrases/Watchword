@@ -12,12 +12,24 @@ const FILES = {
   // Scoring fires every few seconds, so both clips are under a second. A
   // longer sting would still be sounding over the next word.
   correct: ['sounds/correct-1.mp3', 'sounds/correct-2.mp3'],
+  // Passing is frequent too, so it gets the crisp short clip and time-up the
+  // fuller one — that being a once-a-turn moment with nothing following it.
+  pass: ['sounds/pass.mp3'],
   turnWon: ['sounds/turn-won.mp3'],
   timeUp: ['sounds/time-up.mp3'],
   gameOver: ['sounds/game-over.mp3'],
 };
 
 const COUNTDOWN_SRC = 'sounds/countdown.mp3';
+
+// The countdown clip is far longer than we want to hear. Play only its closing
+// seconds, so it reads as a warning rather than a bed running under the turn.
+const COUNTDOWN_LEAD_SECONDS = 5;
+
+// When a cue cannot be timed to real audio — muted, no Audio, a clip that never
+// loads — wait this long instead, so a reveal still gets a beat of suspense
+// without leaving the screen dark in silence.
+const FALLBACK_CUE_MS = 1000;
 
 // Every clip this module can reach. Exported because missing audio fails
 // silently by design, so only a test that checks the files exist on disk can
@@ -64,10 +76,11 @@ function drawFile(kind) {
 // the winner drumroll runs ten seconds and must not bleed into the next game.
 const sounding = new Set();
 
-export function play(kind) {
-  if (muted) return;
+// Returns the element so a caller can time something against it, or null when
+// there is no audio to be had.
+function startSting(kind) {
   const src = drawFile(kind);
-  if (!src) return;
+  if (!src) return null;
 
   try {
     // A fresh element per hit, so quick scoring can overlap instead of cutting
@@ -76,12 +89,18 @@ export function play(kind) {
     sounding.add(element);
     element.addEventListener('ended', () => sounding.delete(element), { once: true });
     element.play().catch(() => sounding.delete(element));
+    return element;
   } catch {
-    /* no Audio in this environment (tests) — stay silent */
+    return null; // no Audio in this environment (tests) — stay silent
   }
 }
 
-export function stopStings() {
+export function play(kind) {
+  if (muted) return;
+  startSting(kind);
+}
+
+function silenceSounding() {
   sounding.forEach((element) => {
     try {
       element.pause();
@@ -91,6 +110,76 @@ export function stopStings() {
     }
   });
   sounding.clear();
+}
+
+/* ─── Reveal cues ─────────────────────────────────────────────── */
+
+// Pending callbacks waiting on a clip to reach its closing seconds.
+const cues = new Set();
+
+function armCue(fire, ms) {
+  const cue = { fire };
+  cue.id = setTimeout(() => {
+    cues.delete(cue);
+    fire();
+  }, Math.max(0, ms));
+  cues.add(cue);
+}
+
+// Drop pending cues without running them — for leaving the screen they were
+// timed for.
+function cancelCues() {
+  cues.forEach((cue) => clearTimeout(cue.id));
+  cues.clear();
+}
+
+// Run pending cues now. Used when the audio they were waiting on has gone:
+// whatever they were about to reveal still has to be revealed.
+function flushCues() {
+  const pending = [...cues];
+  cues.forEach((cue) => clearTimeout(cue.id));
+  cues.clear();
+  pending.forEach((cue) => cue.fire());
+}
+
+export function stopStings() {
+  cancelCues();
+  silenceSounding();
+}
+
+// Play a sting and call back when `leadSeconds` of it remain, so a reveal can
+// land on the music rather than guessing at a delay. Returns a function that
+// cancels the pending cue; the callback runs at most once either way.
+export function playWithCue(kind, leadSeconds, onCue) {
+  let done = false;
+  const fire = () => {
+    if (done) return;
+    done = true;
+    onCue();
+  };
+
+  const element = muted ? null : startSting(kind);
+
+  if (!element) {
+    armCue(fire, FALLBACK_CUE_MS);
+    return () => {
+      done = true;
+    };
+  }
+
+  // Duration is unknown until the browser has the clip's metadata.
+  const schedule = () => {
+    const total = element.duration;
+    if (!Number.isFinite(total) || total <= 0) armCue(fire, FALLBACK_CUE_MS);
+    else armCue(fire, (total - leadSeconds) * 1000);
+  };
+
+  if (Number.isFinite(element.duration) && element.duration > 0) schedule();
+  else element.addEventListener('loadedmetadata', schedule, { once: true });
+
+  return () => {
+    done = true;
+  };
 }
 
 /* ─── Countdown bed ───────────────────────────────────────────── */
@@ -108,12 +197,12 @@ function countdownElement() {
 }
 
 // Align the clip so its final beat lands on zero: play the tail that matches
-// the time left. A round longer than the clip stays silent until the clip's
-// own length is all that remains; a shorter round starts partway in.
+// the time left. Nothing sounds until the last COUNTDOWN_LEAD_SECONDS, or the
+// whole clip if it happens to be shorter than that.
 function seekTo(element, remainingSeconds) {
   const total = element.duration;
   if (!Number.isFinite(total) || total <= 0) return false;
-  if (remainingSeconds > total) return false;
+  if (remainingSeconds > Math.min(total, COUNTDOWN_LEAD_SECONDS)) return false;
 
   try {
     element.currentTime = Math.max(0, total - remainingSeconds);
@@ -180,7 +269,10 @@ export function setMuted(value) {
   muted = Boolean(value);
   if (muted) {
     stopCountdown();
-    stopStings();
+    silenceSounding();
+    // Cues are *flushed*, not cancelled: muting kills the music a reveal was
+    // waiting on, and dropping the cue would leave the screen dark for good.
+    flushCues();
   }
   return muted;
 }

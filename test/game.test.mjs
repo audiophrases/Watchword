@@ -167,6 +167,48 @@ check('two score rows', $('scoreboard').querySelectorAll('.score-row').length ==
 check('leader marked', $('scoreboard').querySelector('.score-row').classList.contains('leader'));
 check('Red row first', $('scoreboard').querySelector('.score-team').textContent === 'Red');
 
+console.log('\n-- blackout reveal --');
+// The scoreboard is built behind the blackout so it is ready on the cue.
+check('screen goes black on the winner music', !$('blackout').classList.contains('hidden'));
+check('score is already rendered behind it', $('scoreboard').querySelectorAll('.score-row').length === 2);
+// jsdom has no Audio, so the cue falls back to its fixed beat rather than
+// waiting on a clip that will never load.
+await new Promise((r) => setTimeout(r, 1400));
+check('reveal lifts the blackout', $('blackout').classList.contains('hidden'));
+
+// A second run, cut short by tapping through.
+click('playAgainBtn');
+for (let t = 0; t < 2; t += 1) {
+  click('beginTurn');
+  click('endTurnBtn');
+  click('nextTurnBtn');
+}
+check('black again on the next final', !$('blackout').classList.contains('hidden'));
+click('blackout');
+check('tapping skips the wait', $('blackout').classList.contains('hidden'));
+
+// Leaving the screen must never strand a black rectangle.
+click('playAgainBtn');
+for (let t = 0; t < 2; t += 1) {
+  click('beginTurn');
+  click('endTurnBtn');
+  click('nextTurnBtn');
+}
+check('black once more', !$('blackout').classList.contains('hidden'));
+click('backToSetupBtn');
+check('navigating away clears it', $('blackout').classList.contains('hidden'));
+check('and lands on setup', visible() === 'setupScreen', visible());
+
+// Back to the final screen for the checks that follow.
+$('teamInput').value = 'Red\nBlue';
+click('startGame');
+for (let t = 0; t < 2; t += 1) {
+  click('beginTurn');
+  click('endTurnBtn');
+  click('nextTurnBtn');
+}
+click('blackout');
+
 click('playAgainBtn');
 check(
   'play again -> handoff Red',

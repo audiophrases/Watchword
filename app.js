@@ -63,6 +63,10 @@ const playAgainBtn = document.getElementById('playAgainBtn');
 const backToSetupBtn = document.getElementById('backToSetupBtn');
 
 const muteBtn = document.getElementById('muteBtn');
+const blackout = document.getElementById('blackout');
+
+// Cancels the pending final-score reveal, when one is waiting on the music.
+let cancelReveal = null;
 
 const DEFAULTS = {
   teams: ['Team 1', 'Team 2'],
@@ -88,6 +92,14 @@ let turn = null;
 /* ─── Screens ─────────────────────────────────────────────────── */
 
 function showScreen(name) {
+  // Whatever the route, changing screen lifts the blackout — no navigation
+  // should ever be able to leave the device showing a black rectangle.
+  if (cancelReveal) {
+    cancelReveal();
+    cancelReveal = null;
+  }
+  blackout.classList.add('hidden');
+
   Object.entries(screens).forEach(([key, el]) => {
     el.classList.toggle('hidden', key !== name);
   });
@@ -399,6 +411,7 @@ function markPass() {
   turn.passes += 1;
   turn.words.push({ ...turn.current, result: 'passed' });
   game.dealer.pushBack(turn.current);
+  sfx.play('pass');
   nextWord();
 }
 
@@ -480,11 +493,22 @@ function renderResult(result, reason) {
   nextTurnBtn.textContent = isLastTeam ? 'See final score' : `Next team: ${settings.teams[game.turnIndex + 1]}`;
 }
 
+// How much of the winner music is left playing once the score is on screen.
+const REVEAL_LEAD_SECONDS = 3.5;
+
+function revealFinalScore() {
+  cancelReveal = null;
+  blackout.classList.add('hidden');
+}
+
 function advanceTurn() {
   if (game.turnIndex >= settings.teams.length - 1) {
+    // Build the scoreboard behind the blackout so it is ready the instant the
+    // music cues, then reveal it with REVEAL_LEAD_SECONDS still to play.
     renderFinal();
     showScreen('final');
-    sfx.play('gameOver');
+    blackout.classList.remove('hidden');
+    cancelReveal = sfx.playWithCue('gameOver', REVEAL_LEAD_SECONDS, revealFinalScore);
     return;
   }
   game.turnIndex += 1;
@@ -562,6 +586,12 @@ function applyMute(value) {
 muteBtn.addEventListener('click', () => {
   applyMute(!sfx.isMuted());
   saveSettings();
+});
+
+// Nobody should be stuck watching a black screen wait out the music.
+blackout.addEventListener('click', () => {
+  if (cancelReveal) cancelReveal();
+  revealFinalScore();
 });
 
 startGameBtn.addEventListener('click', startGame);
