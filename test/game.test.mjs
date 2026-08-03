@@ -71,6 +71,23 @@ $('relatedInput').checked = true;
 fire('relatedInput', 'change');
 check('reticking restores the pool', poolCount() === withRelated, `${poolCount()} vs ${withRelated}`);
 
+console.log('\n-- multi-word toggle --');
+check('off by default', !$('phrasesInput').checked);
+check('no phrase count while off', !/multi-word/.test($('poolSummary').textContent), $('poolSummary').textContent);
+const levelsSingleWord = $('levelPills').querySelectorAll('input').length;
+$('phrasesInput').checked = true;
+fire('phrasesInput', 'change');
+const withPhrases = poolCount();
+check(`ticking grows the pool (${withRelated} -> ${withPhrases})`, withPhrases > withRelated);
+check('summary counts the phrases', /\d+ multi-word/.test($('poolSummary').textContent), $('poolSummary').textContent);
+check('summary switches to "answers"', /answers ready/.test($('poolSummary').textContent), $('poolSummary').textContent);
+check('the roster level reappears', $('levelPills').querySelectorAll('input').length > levelsSingleWord,
+  `${$('levelPills').querySelectorAll('input').length} vs ${levelsSingleWord}`);
+$('phrasesInput').checked = false;
+fire('phrasesInput', 'change');
+check('unticking restores single-word play', poolCount() === withRelated, `${poolCount()} vs ${withRelated}`);
+check('levels shrink back', $('levelPills').querySelectorAll('input').length === levelsSingleWord);
+
 console.log('\n-- validation --');
 $('teamInput').value = 'Solo';
 click('startGame');
@@ -191,61 +208,82 @@ check('drops roster names', !wb.isPlayable('Alsina Diaye, Martina'));
 check('drops non-breaking space', !wb.isPlayable('a b'));
 check('drops blank', !wb.isPlayable('') && !wb.isPlayable('   '));
 
+// The four settings combinations, exercised as a matrix — every one of them is
+// a mode a teacher can actually pick from the setup screen.
+const MODES = [
+  ['single/core', { includeRelated: false, allowPhrases: false }],
+  ['single/related', { includeRelated: true, allowPhrases: false }],
+  ['phrases/core', { includeRelated: false, allowPhrases: true }],
+  ['phrases/related', { includeRelated: true, allowPhrases: true }],
+];
+const cats = (lang, o) => wb.availableCategories(bank, lang, wb.availableLevels(bank, lang, o), o);
+const pool = (lang, o) => wb.buildPool(bank, lang, wb.availableLevels(bank, lang, o), cats(lang, o), o);
+
 // Every filter the setup screen offers must actually yield words, or a teacher
 // picks it and gets an empty pool at kickoff.
 let emptyOffer = '';
-for (const lang of wb.availableLanguages(bank)) {
-  const levels = wb.availableLevels(bank, lang);
-  for (const level of levels) {
-    const cats = wb.availableCategories(bank, lang, [level]);
-    if (!wb.buildPool(bank, lang, [level], cats).length) emptyOffer ||= `${lang}/${level}`;
-    for (const cat of cats) {
-      if (!wb.buildPool(bank, lang, [level], [cat]).length) emptyOffer ||= `${lang}/${level}/${cat}`;
+for (const [name, o] of MODES) {
+  for (const lang of wb.availableLanguages(bank, o)) {
+    for (const level of wb.availableLevels(bank, lang, o)) {
+      const levelCats = wb.availableCategories(bank, lang, [level], o);
+      if (!wb.buildPool(bank, lang, [level], levelCats, o).length) emptyOffer ||= `${name} ${lang}/${level}`;
+      for (const cat of levelCats) {
+        if (!wb.buildPool(bank, lang, [level], [cat], o).length) emptyOffer ||= `${name} ${lang}/${level}/${cat}`;
+      }
+    }
+    const p = pool(lang, o);
+    const keys = p.map((x) => x.word.toLocaleLowerCase());
+    check(`${name} ${lang}: no answer deals twice (${p.length})`, new Set(keys).size === keys.length,
+      `${keys.length} vs ${new Set(keys).size}`);
+    if (!o.allowPhrases) {
+      check(`${name} ${lang}: single words only`, p.every((x) => wb.isPlayable(x.word)));
+    }
+    if (!o.includeRelated) {
+      check(`${name} ${lang}: no related words`, p.every((x) => !x.related));
     }
   }
-  const pool = wb.buildPool(bank, lang, levels, wb.availableCategories(bank, lang, levels));
-  check(`${lang} pool is all single words (${pool.length})`, pool.every((p) => wb.isPlayable(p.word)));
 }
-check('no filter is offered empty', emptyOffer === '', emptyOffer);
-check('en hides its roster-only A0 (related on)', !wb.availableLevels(bank, 'en', true).includes('A0'));
-check('en hides its roster-only A0 (related off)', !wb.availableLevels(bank, 'en', false).includes('A0'));
+check('no filter is offered empty in any mode', emptyOffer === '', emptyOffer);
 
-// The idiom rows are multi-word in the `word` column but their distractors
-// gloss them in one word ("blab" for "spill the beans"), so the category is
-// playable only when related words are switched on.
-const enCats = (on) => wb.availableCategories(bank, 'en', wb.availableLevels(bank, 'en', on), on);
-check('idioms hidden without related words', !enCats(false).includes('Idioms'));
-check('idioms return with related words', enCats(true).includes('Idioms'));
-
-console.log('\n-- related words --');
-for (const lang of wb.availableLanguages(bank, true)) {
-  const off = wb.buildPool(bank, lang, wb.availableLevels(bank, lang, false), enCatsFor(lang, false), false);
-  const on = wb.buildPool(bank, lang, wb.availableLevels(bank, lang, true), enCatsFor(lang, true), true);
-  const core = on.filter((p) => !p.related).length;
-  check(`${lang}: off is core only (${off.length})`, off.every((p) => !p.related));
-  check(`${lang}: on is bigger (${off.length} -> ${on.length})`, on.length > off.length * 3);
-  // Curated words must keep their own level and category, never be shadowed by
-  // an earlier row that happens to list them as a distractor.
-  check(`${lang}: every core word survives`, core === off.length, `${core} vs ${off.length}`);
-  const keys = on.map((p) => p.word.toLocaleLowerCase());
-  check(`${lang}: no word deals twice`, new Set(keys).size === keys.length, `${keys.length} vs ${new Set(keys).size}`);
+console.log('\n-- each switch only ever grows the pool --');
+for (const lang of wb.availableLanguages(bank)) {
+  const [sc, sr, pc, pr] = MODES.map(([, o]) => pool(lang, o).length);
+  check(`${lang}: related words add (${sc} -> ${sr})`, sr > sc);
+  check(`${lang}: phrases add (${sc} -> ${pc})`, pc > sc);
+  check(`${lang}: both add most (${pr})`, pr > sr && pr > pc);
+  // A curated word must keep its own level and category, never be shadowed by
+  // an earlier row that happens to list it as a distractor.
+  check(`${lang}: every core word survives related mode`,
+    pool(lang, MODES[1][1]).filter((p) => !p.related).length === sc);
 }
 
-function enCatsFor(lang, on) {
-  return wb.availableCategories(bank, lang, wb.availableLevels(bank, lang, on), on);
-}
+console.log('\n-- what each switch unlocks --');
+// Idiom rows are multi-word in the `word` column, so the category needs either
+// switch: distractors gloss them in one word, or phrases admit the idiom itself.
+check('idioms hidden with both off', !cats('en', MODES[0][1]).includes('Idioms'));
+check('idioms return via related words', cats('en', MODES[1][1]).includes('Idioms'));
+check('idioms return via phrases', cats('en', MODES[2][1]).includes('Idioms'));
 
-check(
-  'dealer key separates the two modes',
-  wb.createDealer(bank, 'en', ['A1'], enCatsFor('en', true), true).key !==
-    wb.createDealer(bank, 'en', ['A1'], enCatsFor('en', true), false).key,
-);
+// The A0 class roster is "Surname, Firstname" rows with no distractors, so only
+// allowing phrases can reach it.
+check('roster hidden while single-word', !wb.availableLevels(bank, 'en', MODES[1][1]).includes('A0'));
+check('roster reachable with phrases', wb.availableLevels(bank, 'en', MODES[2][1]).includes('A0'));
 
-// The sheet files a few words under two categories on purpose; dealing one
+check('every mode gets its own dealer', new Set(
+  MODES.map(([, o]) => wb.createDealer(bank, 'en', ['A1'], cats('en', o), o).key),
+).size === 4);
+
+// The old positional boolean must not slip through as a silent no-op.
+check('a stray boolean is rejected', (() => {
+  try { wb.buildPool(bank, 'en', ['A1'], ['Classroom'], true); return false; } catch { return true; }
+})());
+
+// The sheet files some words under two categories on purpose; dealing one
 // twice in a game would break the no-repeat promise.
-const enCore = wb.buildPool(bank, 'en', wb.availableLevels(bank, 'en', false), enCatsFor('en', false), false);
+const enCore = pool('en', MODES[0][1]);
 ['apple', 'madrid', 'map', 'paradox', 'platform'].forEach((w) => {
-  check(`"${w}" is dealt once`, enCore.filter((p) => p.word.toLowerCase() === w).length === 1);
+  const hits = enCore.filter((p) => p.word.toLowerCase() === w).length;
+  if (hits) check(`"${w}" is dealt once`, hits === 1, String(hits));
 });
 
 console.log('\n-- sound --');

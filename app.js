@@ -27,6 +27,7 @@ const toggleCategories = document.getElementById('toggleCategories');
 const secondsInput = document.getElementById('secondsInput');
 const targetInput = document.getElementById('targetInput');
 const relatedInput = document.getElementById('relatedInput');
+const phrasesInput = document.getElementById('phrasesInput');
 const bankStatus = document.getElementById('bankStatus');
 const poolSummary = document.getElementById('poolSummary');
 const setupError = document.getElementById('setupError');
@@ -71,6 +72,7 @@ const DEFAULTS = {
   seconds: 120,
   target: 5,
   includeRelated: true,
+  allowPhrases: false,
   muted: false,
 };
 
@@ -134,14 +136,14 @@ function renderPills(container, values, selected) {
   });
 }
 
-// Read straight from the checkbox: the filter lists have to redraw the moment
-// it changes, before any of it is committed to settings.
-function relatedOn() {
-  return relatedInput.checked;
+// Read straight from the checkboxes: the filter lists have to redraw the moment
+// one changes, before any of it is committed to settings.
+function currentRules() {
+  return { includeRelated: relatedInput.checked, allowPhrases: phrasesInput.checked };
 }
 
 function renderLanguages() {
-  const languages = availableLanguages(bank, relatedOn());
+  const languages = availableLanguages(bank, currentRules());
   languageSelect.innerHTML = '';
   languages.forEach((code) => {
     const option = document.createElement('option');
@@ -156,14 +158,14 @@ function renderLanguages() {
 }
 
 function renderLevels() {
-  const levels = availableLevels(bank, settings.language, relatedOn());
+  const levels = availableLevels(bank, settings.language, currentRules());
   const selected = settings.levels.filter((l) => levels.includes(l));
   renderPills(levelPills, levels, selected.length ? selected : levels);
 }
 
 function renderCategories() {
   const levels = checkedValues(levelPills);
-  const categories = availableCategories(bank, settings.language, levels, relatedOn());
+  const categories = availableCategories(bank, settings.language, levels, currentRules());
   const selected = settings.categories.filter((c) => categories.includes(c));
   renderPills(categoryPills, categories, selected.length ? selected : categories);
 }
@@ -171,7 +173,7 @@ function renderCategories() {
 function updatePoolSummary() {
   const levels = checkedValues(levelPills);
   const categories = checkedValues(categoryPills);
-  const pool = buildPool(bank, settings.language, levels, categories, relatedOn());
+  const pool = buildPool(bank, settings.language, levels, categories, currentRules());
   const target = Number(targetInput.value) || DEFAULTS.target;
 
   if (!pool.length) {
@@ -181,10 +183,16 @@ function updatePoolSummary() {
   }
 
   poolSummary.classList.remove('pool-warning');
+  const parts = [];
   const related = pool.filter((entry) => entry.related).length;
-  const breakdown = related ? ` (${pool.length - related} + ${related} related)` : '';
+  if (related) parts.push(`${pool.length - related} + ${related} related`);
+  const phrases = pool.filter((entry) => /\s/u.test(entry.word)).length;
+  if (phrases) parts.push(`${phrases} multi-word`);
+  const breakdown = parts.length ? ` (${parts.join(', ')})` : '';
+
+  const noun = phrases ? 'answers' : 'words';
   poolSummary.textContent =
-    `${pool.length} words ready${breakdown} — about ${Math.floor(pool.length / Math.max(target, 1))} full turns before any word repeats.`;
+    `${pool.length} ${noun} ready${breakdown} — about ${Math.floor(pool.length / Math.max(target, 1))} full turns before any repeat.`;
 }
 
 function refreshSetup() {
@@ -198,6 +206,7 @@ function populateSetupInputs() {
   secondsInput.value = settings.seconds;
   targetInput.value = settings.target;
   relatedInput.checked = settings.includeRelated !== false;
+  phrasesInput.checked = settings.allowPhrases === true;
 }
 
 /* ─── Setup reading ───────────────────────────────────────────── */
@@ -224,7 +233,7 @@ function readSetup() {
     categories: checkedValues(categoryPills),
     seconds: Number(secondsInput.value),
     target: Number(targetInput.value),
-    includeRelated: relatedOn(),
+    ...currentRules(),
     // Mute lives in the header rather than the setup form, so carry it across
     // instead of letting a fresh read drop it.
     muted: sfx.isMuted(),
@@ -238,7 +247,7 @@ function validate(next) {
   if (!Number.isFinite(next.seconds) || next.seconds < 15) return 'Round length must be at least 15 seconds.';
   if (!Number.isFinite(next.target) || next.target < 1) return 'Words to win must be at least 1.';
 
-  const pool = buildPool(bank, next.language, next.levels, next.categories, next.includeRelated);
+  const pool = buildPool(bank, next.language, next.levels, next.categories, next);
   if (!pool.length) return 'No words match these filters.';
   if (pool.length < next.target) {
     return `Only ${pool.length} words match these filters — fewer than the ${next.target} needed to win a turn.`;
@@ -258,7 +267,7 @@ function startGame() {
   saveSettings();
 
   game = {
-    dealer: createDealer(bank, next.language, next.levels, next.categories, next.includeRelated),
+    dealer: createDealer(bank, next.language, next.levels, next.categories, next),
     turnIndex: 0,
     results: [],
   };
@@ -269,8 +278,10 @@ function startGame() {
 function goToHandoff() {
   const team = settings.teams[game.turnIndex];
   handoffTeam.textContent = team;
+  // The clue is always a single word; only the answer may be a phrase.
   handoffRules.textContent =
-    `${settings.target} words in ${formatTime(settings.seconds)} — one-word clues only.`;
+    `${settings.target} ${settings.allowPhrases ? 'answers' : 'words'} in ${formatTime(settings.seconds)} — one-word clues only` +
+    `${settings.allowPhrases ? ', answers may be phrases.' : '.'}`;
   showScreen('handoff');
 }
 
@@ -588,11 +599,15 @@ function rememberPicks(container, chosen) {
   return [...checkedValues(container), ...chosen.filter((value) => !onScreen.has(value))];
 }
 
-relatedInput.addEventListener('change', () => {
-  settings.levels = rememberPicks(levelPills, settings.levels);
-  settings.categories = rememberPicks(categoryPills, settings.categories);
-  settings.includeRelated = relatedOn();
-  refreshSetup();
+// Both switches change which levels and categories have anything to deal, so
+// they redraw the filters the same way.
+[relatedInput, phrasesInput].forEach((input) => {
+  input.addEventListener('change', () => {
+    settings.levels = rememberPicks(levelPills, settings.levels);
+    settings.categories = rememberPicks(categoryPills, settings.categories);
+    Object.assign(settings, currentRules());
+    refreshSetup();
+  });
 });
 
 function toggleAll(container) {
@@ -656,7 +671,7 @@ async function init() {
     bank = await fetchWordBank();
     renderLanguages();
     refreshSetup();
-    const total = availableLanguages(bank, relatedOn()).length;
+    const total = availableLanguages(bank, currentRules()).length;
     bankStatus.textContent = `Live from the shared sheet · ${total} languages`;
   } catch (error) {
     bankStatus.textContent = 'Could not load the word list.';

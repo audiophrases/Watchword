@@ -18,7 +18,9 @@ their teammates guess.
 - Every team plays its own timed turn, then the scoreboard ranks them: most words wins,
   and a tie breaks on the faster time.
 
-Defaults are 5 words in 2 minutes; both are adjustable in setup.
+Defaults are 5 words in 2 minutes; both are adjustable in setup. The clue is always a
+single word — that is the game — but the *answer* can be opened up to phrases and idioms,
+see [the two switches](#two-switches-decide-what-gets-dealt) below.
 
 ## Screens
 
@@ -97,50 +99,55 @@ Sheet columns:
 New languages, levels and categories appear as filters automatically — no code change
 needed. Rows missing any of language / level / category / word are skipped.
 
-### Related words
+### Two switches decide what gets dealt
 
-The `Distractors` column exists for the Impostor game, which hands those near-synonyms to
-its impostor. As Watchword answers they are ordinary vocabulary, and there are about six
-per row, so switching them on takes the bank from roughly 900 playable words to **5,500**:
+Setup has a tickbox for each. Together they cover a wide range of pool sizes — a snapshot,
+since the sheet grows:
 
-| Language | Words only | With related words |
-|----------|------------|--------------------|
-| ca       | 275        | 1,713              |
-| en       | 351        | 2,009              |
-| fr       | 299        | 1,786              |
+| Setting             | Single-word only            | Multi-word allowed          |
+|---------------------|-----------------------------|-----------------------------|
+| **Words only**      | ca 392 · en 458 · fr 415    | ca 518 · en 626 · fr 550    |
+| **+ related words** | ca 2055 · en 2271 · fr 2132 | ca 2545 · en 2913 · fr 2701 |
 
-They are **on by default**, and the setup screen has a tickbox to turn them off. One thing
-to weigh when picking a level: a useful distractor is a *rarer* near-synonym of its row's
-word, so related words lean harder than the level they inherit — `cup` brings `mug`,
-`sleep` brings `doze`, and `eavesdrop` sits in A1. Untick the box for a class that needs
-to stay strictly on-level.
+Neither switch ever shrinks a category's contents — each only admits more. A level or
+category left with nothing to deal is hidden from setup rather than offered and then found
+empty, so the filter lists change as you flip them.
 
-Switching them on also revives the idiom categories, whose `word` column is entirely
-multi-word but whose distractors gloss each idiom in a single word — `blab` for
-*spill the beans*.
+**Include related words** — *on by default.* The `Distractors` column exists for the
+Impostor game, which hands those near-synonyms to its impostor. As Watchword answers they
+are ordinary vocabulary, and at about six per row they grow the bank roughly sixfold.
 
-A word is never dealt twice in one game, even where the sheet files it under two
+One thing to weigh when picking a level: a useful distractor is a *rarer* near-synonym of
+its row's word, so related words lean harder than the level they inherit — `cup` brings
+`mug`, `sleep` brings `doze`, and `eavesdrop` sits in A1. Untick for a class that needs to
+stay strictly on-level.
+
+**Allow multi-word answers** — *off by default.* The clue is one word, so by default the
+answer is one word too: there is no unambiguous moment where *ice cream* has been guessed,
+and the format cannot judge a half-correct answer, which is why *Password* itself never
+uses multi-word answers. Tick the box to deal the sheet's phrases, collocations and idioms
+anyway — *anar a dormir*, *briser la glace* — and agree with the class beforehand what
+counts as getting one.
+
+Two things surface only with this on. The idiom categories become playable as idioms
+rather than as one-word glosses. And English `A0` reappears — it is a class roster of
+*Surname, Firstname* rows, so ticking this turns it into a guess-your-classmate round.
+Untick it, or deselect `A0`, if that is not what you want.
+
+Hyphenated and elided forms count as one word under either setting: `rendez-vous`,
+`grand-mère`, `s'asseoir` and `despertar-se` are a single written token. Only whitespace
+splits a word.
+
+Nothing is ever removed from the sheet — excluded rows simply are not dealt, and stay
+available to the Impostor game and to ordinary classroom use.
+
+An answer is never dealt twice in one game, even where the sheet files it under two
 categories on purpose (`apple` as food and as a brand). Where a curated word is also some
 other row's distractor, the curated entry wins and keeps the level and category the sheet
 filed it under.
 
-### Only single-word answers are dealt
-
-The clue is one word, so the answer must be one word too. There is no unambiguous moment
-where *ice cream* has been guessed, and the format cannot judge a half-correct answer —
-which is why *Password* itself never uses multi-word answers.
-
-Entries containing a space are therefore **skipped, not deleted**. They stay in the sheet
-for the Impostor game and for ordinary classroom use; Watchword simply never deals them.
-Hyphenated and elided forms are one written token spoken as one word, so `rendez-vous`,
-`grand-mère`, `s'asseoir` and `despertar-se` all stay in play.
-
-This is a Watchword game rule, not a parsing rule, so it lives in `wordbank.js`. Both
-game rules do: `data.js` only reads the sheet, and hands on every row it finds.
-
-A level or category with nothing playable left is hidden from setup rather than offered
-and then found empty. English `A0` disappears for this reason in both modes — it is a
-class roster of *Surname, Firstname* rows, and those carry no distractors either.
+Both switches are game rules, not parsing rules, so they live in `wordbank.js`; `data.js`
+only reads the sheet and hands on every row it finds.
 
 `data.js` (fetch + parse) is deliberately a **standalone copy** rather than a shared
 import, so neither app can break the other. It returns the same shape Impostor's does —

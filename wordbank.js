@@ -4,20 +4,42 @@
 
 import { LEVEL_ORDER } from './data.js';
 
-// Watchword can only be played with single-word answers. The clue is one word,
-// so the answer has to be one word too: with "ice cream" there is no
-// unambiguous moment where the guess is right, and the format has no way to
-// judge a half-correct answer. Password avoids multi-word answers entirely for
-// this reason, and so do we.
+// Two settings decide what may be dealt. Every function here takes them as one
+// options object rather than a row of booleans, so a call site cannot silently
+// swap them.
 //
-// These entries are *skipped, never deleted* — they stay in the shared sheet,
-// where the Impostor game and ordinary classroom use still want them.
+//   includeRelated  deal the sheet's distractors as answers too   (default on)
+//   allowPhrases    deal multi-word answers as well as single ones (default off)
+export const DEFAULT_RULES = { includeRelated: true, allowPhrases: false };
+
+function rules(options) {
+  // These took a bare `includeRelated` boolean once. Spreading a stray boolean
+  // yields an empty object, so an un-migrated call would quietly run on the
+  // defaults instead of what it asked for — fail loudly rather than silently.
+  if (options != null && typeof options !== 'object') {
+    throw new TypeError('wordbank: pass an options object, e.g. { includeRelated, allowPhrases }');
+  }
+  return { ...DEFAULT_RULES, ...(options || {}) };
+}
+
+// Watchword is built for single-word answers. The clue is one word, so the
+// answer is normally one word too: with "ice cream" there is no unambiguous
+// moment where the guess is right, and the format cannot judge a half-correct
+// answer. Password avoids multi-word answers entirely for this reason, which is
+// why single-word is the default — but `allowPhrases` opens it up for classes
+// that want the collocations and idioms the sheet is full of.
 //
-// Hyphenated and elided forms stay in play: "pique-nique", "rendez-vous",
-// "grand-mère", "s'asseoir", "despertar-se" are one written token, spoken as
-// one word. Only whitespace splits a word here.
-export function isPlayable(word) {
-  return typeof word === 'string' && word.trim() !== '' && !/\s/u.test(word.trim());
+// Nothing is ever deleted either way: excluded entries stay in the shared
+// sheet, where the Impostor game and ordinary classroom use still want them.
+//
+// Hyphenated and elided forms count as one word whatever the setting:
+// "pique-nique", "rendez-vous", "grand-mère", "s'asseoir" and "despertar-se"
+// are a single written token, spoken as one word. Only whitespace splits a word.
+export function isPlayable(word, allowPhrases = false) {
+  if (typeof word !== 'string') return false;
+  const trimmed = word.trim();
+  if (trimmed === '') return false;
+  return allowPhrases || !/\s/u.test(trimmed);
 }
 
 // The sheet's `Distractors` column holds the near-synonyms the Impostor game
@@ -29,41 +51,42 @@ export function isPlayable(word) {
 // near-synonym of its row's word, so they skew harder than the level they
 // inherit — "cup" brings "mug", "sleep" brings "doze" and "eavesdrop" sits in
 // A1. Turn them off for a class that needs to stay strictly on-level.
-function playableEntries(bank, language, level, category, includeRelated = true) {
+function playableEntries(bank, language, level, category, options) {
+  const { includeRelated, allowPhrases } = rules(options);
   const rows = bank[language]?.[level]?.[category] || [];
   const entries = [];
 
   rows.forEach((row) => {
-    if (isPlayable(row.word)) entries.push({ word: row.word, related: false });
+    if (isPlayable(row.word, allowPhrases)) entries.push({ word: row.word, related: false });
     if (!includeRelated) return;
     (row.distractors || []).forEach((word) => {
-      if (isPlayable(word)) entries.push({ word, related: true });
+      if (isPlayable(word, allowPhrases)) entries.push({ word, related: true });
     });
   });
 
   return entries;
 }
 
-function hasPlayable(bank, language, includeRelated) {
+function hasPlayable(bank, language, options) {
   return Object.keys(bank[language] || {}).some((level) =>
     Object.keys(bank[language][level]).some(
-      (category) => playableEntries(bank, language, level, category, includeRelated).length > 0,
+      (category) => playableEntries(bank, language, level, category, options).length > 0,
     ),
   );
 }
 
-export function availableLanguages(bank, includeRelated = true) {
+export function availableLanguages(bank, options) {
   return Object.keys(bank)
-    .filter((language) => hasPlayable(bank, language, includeRelated))
+    .filter((language) => hasPlayable(bank, language, options))
     .sort((a, b) => a.localeCompare(b));
 }
 
 // Levels with nothing playable are hidden rather than offered and then found
 // empty — English A0 is entirely a class roster of "Surname, Firstname" rows.
-export function availableLevels(bank, language, includeRelated = true) {
+export function availableLevels(bank, language, options) {
   const levels = Object.keys(bank[language] || {}).filter((level) =>
     Object.keys(bank[language][level]).some(
-      (category) => playableEntries(bank, language, level, category, includeRelated).length > 0,
+      (category) => playableEntries(bank, language, level, category, options).length > 0,
     ),
   );
   const ordered = LEVEL_ORDER.filter((level) => levels.includes(level));
@@ -74,13 +97,13 @@ export function availableLevels(bank, language, includeRelated = true) {
 // Likewise for categories. The idiom categories are wholly multi-word in their
 // `word` column, so they appear only once distractors are switched on — those
 // gloss the idiom in a single word ("blab" for "spill the beans").
-export function availableCategories(bank, language, levels, includeRelated = true) {
+export function availableCategories(bank, language, levels, options) {
   const categories = new Set();
   levels.forEach((level) => {
     const levelBank = bank[language]?.[level];
     if (!levelBank) return;
     Object.keys(levelBank).forEach((category) => {
-      if (playableEntries(bank, language, level, category, includeRelated).length) {
+      if (playableEntries(bank, language, level, category, options).length) {
         categories.add(category);
       }
     });
@@ -88,7 +111,8 @@ export function availableCategories(bank, language, levels, includeRelated = tru
   return Array.from(categories).sort((a, b) => a.localeCompare(b));
 }
 
-export function buildPool(bank, language, levels, categories, includeRelated = true) {
+export function buildPool(bank, language, levels, categories, options) {
+  const { includeRelated } = rules(options);
   const languageBank = bank[language];
   if (!languageBank) return [];
 
@@ -104,7 +128,7 @@ export function buildPool(bank, language, levels, categories, includeRelated = t
       if (!levelBank) return;
 
       categories.forEach((category) => {
-        playableEntries(bank, language, level, category, includeRelated).forEach(
+        playableEntries(bank, language, level, category, options).forEach(
           ({ word, related }) => {
             if (related !== wantRelated) return;
             const key = word.toLocaleLowerCase();
@@ -134,23 +158,25 @@ function shuffle(list) {
   return copy;
 }
 
-function signature(language, levels, categories, includeRelated) {
+function signature(language, levels, categories, options) {
+  const { includeRelated, allowPhrases } = rules(options);
   return [
     language,
     [...levels].sort().join('|'),
     [...categories].sort().join('|'),
     includeRelated ? 'related' : 'core',
+    allowPhrases ? 'phrases' : 'single',
   ].join('__');
 }
 
 // A dealer hands out words one at a time, reshuffling only once the pool is
 // exhausted. Rebuild it whenever the filters change.
-export function createDealer(bank, language, levels, categories, includeRelated = true) {
-  const pool = buildPool(bank, language, levels, categories, includeRelated);
+export function createDealer(bank, language, levels, categories, options) {
+  const pool = buildPool(bank, language, levels, categories, options);
   let queue = shuffle(pool);
 
   return {
-    key: signature(language, levels, categories, includeRelated),
+    key: signature(language, levels, categories, options),
     size: pool.length,
     remaining: () => queue.length,
     next() {
